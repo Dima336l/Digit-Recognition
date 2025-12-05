@@ -186,10 +186,10 @@ public class DigitRecognitionApp {
             throw new IllegalArgumentException("Training data must contain at least two samples for SVM training");
         }
         
-        // Maximum complexity hyperparameter search for highest accuracy
-        double[] lambdaCandidates = {0.00002, 0.00003, 0.00005, 0.00008, 0.0001, 0.00012, 0.00015, 0.00018, 0.0002, 0.00025};
-        int[] epochCandidates = {500, 600, 700, 800};
-        double[] minLRCandidates = {2e-8, 3e-8, 5e-8, 7.5e-8, 1e-7, 1.25e-7, 1.5e-7};
+        // Balanced hyperparameter search targeting ~96% accuracy
+        double[] lambdaCandidates = {0.00003, 0.00005, 0.00008, 0.0001, 0.00012, 0.00015, 0.0002, 0.00025};
+        int[] epochCandidates = {400, 500, 600};
+        double[] minLRCandidates = {3e-8, 5e-8, 7.5e-8, 1e-7, 1.5e-7};
         
         long searchStartTime = System.currentTimeMillis();
         int totalCombinations = lambdaCandidates.length * epochCandidates.length * minLRCandidates.length;
@@ -204,9 +204,9 @@ public class DigitRecognitionApp {
                 for (double minLR : minLRCandidates) {
                     combinationNum++;
                     
-                    // Use multiple validation runs for more reliable estimates (5 runs for better accuracy)
+                    // Use multiple validation runs for more reliable estimates (3 runs)
                     double accuracySum = 0.0;
-                    int validationRuns = 5;
+                    int validationRuns = 3;
                     
                     for (int run = 0; run < validationRuns; run++) {
                         List<DigitSample> shuffled = new ArrayList<>(trainingData);
@@ -224,17 +224,17 @@ public class DigitRecognitionApp {
                     double avgAccuracy = accuracySum / validationRuns;
                     candidates.add(new HyperparameterCandidate(lambda, epochs, minLR, avgAccuracy));
                     
-                    // Progress every 40 combinations (less frequent due to larger search space)
-                    if (combinationNum % 40 == 0 || combinationNum == totalCombinations) {
+                    // Progress every 20 combinations
+                    if (combinationNum % 20 == 0 || combinationNum == totalCombinations) {
                         System.out.printf("  Progress: %d/%d combinations tested\n", combinationNum, totalCombinations);
                     }
                 }
             }
         }
         
-        // Sort by accuracy and select top models for ensemble (increased to 10 for maximum accuracy)
+        // Sort by accuracy and select top models for ensemble
         Collections.sort(candidates);
-        int ensembleSize = Math.min(10, candidates.size());
+        int ensembleSize = Math.min(5, candidates.size());
         long searchTime = System.currentTimeMillis() - searchStartTime;
         System.out.printf("Search complete (%d.%d s). Top %d configurations selected.\n",
                          searchTime / 1000, (searchTime % 1000) / 100, ensembleSize);
@@ -755,7 +755,7 @@ class LinearSVM implements Classifier {
     private static final boolean ENABLE_SPATIAL_AUGMENTATION = true; // Enabled for better accuracy
     private static final boolean ENABLE_RANDOM_FOURIER_FEATURES = true; // Enabled for better accuracy
     private static final boolean ENABLE_POLYNOMIAL_FEATURES = true; // Re-enabled with limited features for 96% accuracy
-    private static final int RANDOM_FOURIER_FEATURE_COUNT = 1024; // Maximum features for highest accuracy
+    private static final int RANDOM_FOURIER_FEATURE_COUNT = 768; // Balanced for ~96% accuracy
     private static final double RANDOM_FOURIER_GAMMA = 0.010;
     private static final long RANDOM_FOURIER_SEED = 1337L;
     private static final int POLYNOMIAL_DEGREE = 2;
@@ -904,8 +904,8 @@ class LinearSVM implements Classifier {
                 }
             }
             
-            // Early stopping: minimal for maximum accuracy (allows full training)
-            if (numUpdates < numSamples * 0.0005 && epoch > 150) {
+            // Early stopping: less aggressive for better convergence
+            if (numUpdates < numSamples * 0.001 && epoch > 100) {
                 break;
             }
             
@@ -1101,8 +1101,8 @@ class LinearSVM implements Classifier {
     
     private int computePolynomialFeatureCount(int baseCount) {
         // For degree 2: include all pairwise products (x_i * x_j where i <= j)
-        // Maximum polynomial features for highest accuracy
-        int maxPolyFeatures = Math.min(1536, baseCount * (baseCount + 1) / 2);
+        // Balanced polynomial features for ~96% accuracy
+        int maxPolyFeatures = Math.min(1024, baseCount * (baseCount + 1) / 2);
         return maxPolyFeatures;
     }
     
