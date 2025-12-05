@@ -91,6 +91,15 @@ public class DigitRecognitionApp {
      * @param foldName Name of the fold for display purposes
      * @return Results summary for this fold
      */
+    private static final double[] SVM_LAMBDA_CANDIDATES = {
+        0.0003, 0.00035, 0.0004, 0.00045, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.0010, 0.0012
+    };
+    private static final int[] SVM_EPOCH_CANDIDATES = {100, 120, 140, 160, 180, 200};
+    private static final double[] SVM_MIN_LR_CANDIDATES = {5e-8, 7.5e-8, 1e-7, 1.25e-7, 1.5e-7};
+    private static final int SVM_ENSEMBLE_SIZE = 3;
+    private static final int SVM_VALIDATION_REPEATS = 6;
+    private static final double VALIDATION_SPLIT_RATIO = 0.85;
+    
     private static FoldResults evaluateAllAlgorithms(List<DigitSample> trainSet, List<DigitSample> testSet, String foldName) {
         /*
          * Temporarily comment out the other algorithms while focusing solely on SVM.
@@ -121,11 +130,11 @@ public class DigitRecognitionApp {
 //        weightedKNN.train(trainSet);
 //        double weightedAccuracy = EvaluationMetrics.evaluateClassifier(weightedKNN, testSet);
         
-        System.out.println("\nSUPPORT VECTOR MACHINE (Linear SVM):");
-        long svmStartTime = System.currentTimeMillis();
+        System.out.println("\nSUPPORT VECTOR MACHINE (Linear SVM) ONLY:");
         SVMTrainingResult svmTrainingResult = trainBestLinearSVM(trainSet);
-        long svmTrainingTime = System.currentTimeMillis() - svmStartTime;
-        System.out.printf("Training complete (%d.%d s)\n", svmTrainingTime / 1000, (svmTrainingTime % 1000) / 100);
+        System.out.printf("Selected Linear SVM config: %s (validation accuracy %.2f%%)\n",
+                          svmTrainingResult.hyperparameterSummary,
+                          svmTrainingResult.validationAccuracy);
         double svmAccuracy = EvaluationMetrics.evaluateClassifier(svmTrainingResult.classifier, testSet);
         
         System.out.println("\n" + foldName + " SUMMARY:");
@@ -135,7 +144,7 @@ public class DigitRecognitionApp {
         System.out.printf("  Linear SVM [%s]: %.2f%%\n", svmTrainingResult.hyperparameterSummary, svmAccuracy);
         System.out.println();
         
-        return new FoldResults(svmAccuracy, svmTrainingResult.hyperparameterSummary, svmTrainingTime);
+        return new FoldResults(svmAccuracy, svmTrainingResult.hyperparameterSummary);
     }
     
     /**
@@ -156,13 +165,6 @@ public class DigitRecognitionApp {
         System.out.printf("  Fold 1 (SVM): %s\n", fold1Results.svmHyperparameterSummary);
         System.out.printf("  Fold 2 (SVM): %s\n", fold2Results.svmHyperparameterSummary);
         
-        // Calculate and display total SVM training time
-        long totalSVMTimeMs = fold1Results.svmTrainingTimeMs + fold2Results.svmTrainingTimeMs;
-        long totalMinutes = totalSVMTimeMs / 60000;
-        long totalSeconds = (totalSVMTimeMs % 60000) / 1000;
-        System.out.printf("\nTotal SVM Training Time: %d min %d s (%.1f minutes)\n",
-                         totalMinutes, totalSeconds, totalSVMTimeMs / 60000.0);
-        
         System.out.println("\n=== Analysis Complete ===");
     }
     
@@ -172,12 +174,10 @@ public class DigitRecognitionApp {
     private static class FoldResults {
         final double svmAccuracy;
         final String svmHyperparameterSummary;
-        final long svmTrainingTimeMs;
         
-        FoldResults(double svmAccuracy, String svmHyperparameterSummary, long svmTrainingTimeMs) {
+        FoldResults(double svmAccuracy, String svmHyperparameterSummary) {
             this.svmAccuracy = svmAccuracy;
             this.svmHyperparameterSummary = svmHyperparameterSummary;
-            this.svmTrainingTimeMs = svmTrainingTimeMs;
         }
     }
     
@@ -186,109 +186,74 @@ public class DigitRecognitionApp {
             throw new IllegalArgumentException("Training data must contain at least two samples for SVM training");
         }
         
-        // Balanced hyperparameter search targeting ~96% accuracy
-        double[] lambdaCandidates = {0.00003, 0.00005, 0.00008, 0.0001, 0.00012, 0.00015, 0.0002, 0.00025};
-        int[] epochCandidates = {400, 500, 600};
-        double[] minLRCandidates = {3e-8, 5e-8, 7.5e-8, 1e-7, 1.5e-7};
+        List<HyperparameterCandidate> candidateResults = new ArrayList<>();
         
-        long searchStartTime = System.currentTimeMillis();
-        int totalCombinations = lambdaCandidates.length * epochCandidates.length * minLRCandidates.length;
-        System.out.printf("Hyperparameter search: testing %d combinations...\n", totalCombinations);
+        System.out.println("Performing internal validation for Linear SVM hyperparameters...");
         
-        // Store top candidates for ensemble
-        List<HyperparameterCandidate> candidates = new ArrayList<>();
-        int combinationNum = 0;
-        
-        for (double lambda : lambdaCandidates) {
-            for (int epochs : epochCandidates) {
-                for (double minLR : minLRCandidates) {
-                    combinationNum++;
+        for (double lambda : SVM_LAMBDA_CANDIDATES) {
+            for (int epochs : SVM_EPOCH_CANDIDATES) {
+                for (double minLR : SVM_MIN_LR_CANDIDATES) {
+                    double accuracy = evaluateSVMHyperparameters(trainingData, lambda, epochs, minLR);
+                    System.out.printf("  Candidate λ=%.5f, epochs=%d, η_min=%.1e -> validation accuracy %.2f%%\n",
+                                      lambda, epochs, minLR, accuracy);
                     
-                    // Use multiple validation runs for more reliable estimates (3 runs)
-                    double accuracySum = 0.0;
-                    int validationRuns = 3;
-                    
-                    for (int run = 0; run < validationRuns; run++) {
-                        List<DigitSample> shuffled = new ArrayList<>(trainingData);
-                        Collections.shuffle(shuffled, new Random(combinationNum * 1000 + run));
-                        int split = (int)(shuffled.size() * 0.80);
-                        List<DigitSample> trainSubset = new ArrayList<>(shuffled.subList(0, split));
-                        List<DigitSample> valSubset = new ArrayList<>(shuffled.subList(split, shuffled.size()));
-                        
-                        LinearSVM candidate = new LinearSVM(lambda, epochs, minLR);
-                        candidate.train(trainSubset);
-                        double accuracy = candidate.evaluate(valSubset);
-                        accuracySum += accuracy;
-                    }
-                    
-                    double avgAccuracy = accuracySum / validationRuns;
-                    candidates.add(new HyperparameterCandidate(lambda, epochs, minLR, avgAccuracy));
-                    
-                    // Progress every 20 combinations
-                    if (combinationNum % 20 == 0 || combinationNum == totalCombinations) {
-                        System.out.printf("  Progress: %d/%d combinations tested\n", combinationNum, totalCombinations);
-                    }
+                    candidateResults.add(new HyperparameterCandidate(lambda, epochs, minLR, accuracy));
                 }
             }
         }
         
-        // Sort by accuracy and select top models for ensemble
-        Collections.sort(candidates);
-        int ensembleSize = Math.min(5, candidates.size());
-        long searchTime = System.currentTimeMillis() - searchStartTime;
-        System.out.printf("Search complete (%d.%d s). Top %d configurations selected.\n",
-                         searchTime / 1000, (searchTime % 1000) / 100, ensembleSize);
-        
-        // Train ensemble of top models
-        long trainingStartTime = System.currentTimeMillis();
+        Collections.sort(candidateResults);
         List<LinearSVM> ensembleModels = new ArrayList<>();
         List<String> ensembleSummaries = new ArrayList<>();
         
-        for (int i = 0; i < ensembleSize; i++) {
-            HyperparameterCandidate c = candidates.get(i);
-            LinearSVM model = new LinearSVM(c.lambda, c.epochs, c.minLR);
+        int modelsToTrain = Math.min(SVM_ENSEMBLE_SIZE, candidateResults.size());
+        for (int i = 0; i < modelsToTrain; i++) {
+            HyperparameterCandidate candidate = candidateResults.get(i);
+            LinearSVM model = new LinearSVM(candidate.lambda, candidate.epochs, candidate.minLearningRate);
             model.train(trainingData);
             ensembleModels.add(model);
-            ensembleSummaries.add(String.format("λ=%.5f, epochs=%d, η_min=%.1e (val %.2f%%)",
-                                               c.lambda, c.epochs, c.minLR, c.accuracy));
+            ensembleSummaries.add(candidate.describe());
         }
         
-        long trainingTime = System.currentTimeMillis() - trainingStartTime;
-        System.out.printf("Ensemble training complete (%d.%d s).\n", trainingTime / 1000, (trainingTime % 1000) / 100);
-        
-        Classifier finalClassifier;
+        Classifier classifier;
         String summaryText;
-        double bestAccuracy = candidates.get(0).accuracy;
+        double referenceAccuracy = candidateResults.isEmpty() ? 0.0 : candidateResults.get(0).validationAccuracy;
         
         if (ensembleModels.size() == 1) {
-            finalClassifier = ensembleModels.get(0);
-            HyperparameterCandidate best = candidates.get(0);
-            summaryText = String.format("λ=%.5f, epochs=%d", best.lambda, best.epochs);
+            classifier = ensembleModels.get(0);
+            summaryText = ensembleSummaries.get(0);
         } else {
-            finalClassifier = new LinearSVMEnsemble(ensembleModels);
-            summaryText = String.format("Ensemble of %d models", ensembleSize);
+            classifier = new LinearSVMEnsemble(ensembleModels);
+            summaryText = String.format("Ensemble of %d models: %s", 
+                                        ensembleModels.size(), String.join("; ", ensembleSummaries));
         }
         
-        return new SVMTrainingResult(finalClassifier, summaryText, bestAccuracy);
+        return new SVMTrainingResult(classifier, summaryText, referenceAccuracy);
     }
     
-    private static class HyperparameterCandidate implements Comparable<HyperparameterCandidate> {
-        final double lambda;
-        final int epochs;
-        final double minLR;
-        final double accuracy;
+    private static double evaluateSVMHyperparameters(List<DigitSample> trainingData,
+                                                     double lambda,
+                                                     int epochs,
+                                                     double minLearningRate) {
+        double accuracySum = 0.0;
         
-        HyperparameterCandidate(double lambda, int epochs, double minLR, double accuracy) {
-            this.lambda = lambda;
-            this.epochs = epochs;
-            this.minLR = minLR;
-            this.accuracy = accuracy;
+        for (int repeat = 0; repeat < SVM_VALIDATION_REPEATS; repeat++) {
+            List<DigitSample> shuffled = new ArrayList<>(trainingData);
+            Collections.shuffle(shuffled, new Random(Objects.hash(lambda, epochs, minLearningRate, repeat)));
+            
+            int validationStartIndex = (int) (shuffled.size() * VALIDATION_SPLIT_RATIO);
+            validationStartIndex = Math.min(Math.max(validationStartIndex, 1), shuffled.size() - 1);
+            
+            List<DigitSample> innerTrain = new ArrayList<>(shuffled.subList(0, validationStartIndex));
+            List<DigitSample> validationSet = new ArrayList<>(shuffled.subList(validationStartIndex, shuffled.size()));
+            
+            LinearSVM candidate = new LinearSVM(lambda, epochs, minLearningRate);
+            candidate.train(innerTrain);
+            double accuracy = candidate.evaluate(validationSet);
+            accuracySum += accuracy;
         }
         
-        @Override
-        public int compareTo(HyperparameterCandidate other) {
-            return Double.compare(other.accuracy, this.accuracy); // Sort descending
-        }
+        return accuracySum / SVM_VALIDATION_REPEATS;
     }
     
     private static class SVMTrainingResult {
@@ -303,6 +268,29 @@ public class DigitRecognitionApp {
         }
     }
     
+    private static class HyperparameterCandidate implements Comparable<HyperparameterCandidate> {
+        final double lambda;
+        final int epochs;
+        final double minLearningRate;
+        final double validationAccuracy;
+        
+        HyperparameterCandidate(double lambda, int epochs, double minLearningRate, double validationAccuracy) {
+            this.lambda = lambda;
+            this.epochs = epochs;
+            this.minLearningRate = minLearningRate;
+            this.validationAccuracy = validationAccuracy;
+        }
+        
+        @Override
+        public int compareTo(HyperparameterCandidate other) {
+            return Double.compare(other.validationAccuracy, this.validationAccuracy);
+        }
+        
+        String describe() {
+            return String.format("λ=%.5f, epochs=%d, η_min=%.1e (val %.2f%%)", 
+                                 lambda, epochs, minLearningRate, validationAccuracy);
+        }
+    }
 }
 
 // ============================================================================
@@ -752,11 +740,11 @@ class LinearSVM implements Classifier {
     public static final double DEFAULT_REGULARIZATION_PARAMETER = 0.001;
     public static final int DEFAULT_MAX_EPOCHS = 50;
     public static final double DEFAULT_MIN_LEARNING_RATE = 1e-7;
-    private static final boolean ENABLE_SPATIAL_AUGMENTATION = true; // Enabled for better accuracy
-    private static final boolean ENABLE_RANDOM_FOURIER_FEATURES = true; // Enabled for better accuracy
-    private static final boolean ENABLE_POLYNOMIAL_FEATURES = true; // Re-enabled with limited features for 96% accuracy
-    private static final int RANDOM_FOURIER_FEATURE_COUNT = 768; // Balanced for ~96% accuracy
-    private static final double RANDOM_FOURIER_GAMMA = 0.010;
+    private static final boolean ENABLE_SPATIAL_AUGMENTATION = true;
+    private static final boolean ENABLE_RANDOM_FOURIER_FEATURES = true;
+    private static final boolean ENABLE_POLYNOMIAL_FEATURES = true;
+    private static final int RANDOM_FOURIER_FEATURE_COUNT = 384;
+    private static final double RANDOM_FOURIER_GAMMA = 0.012;
     private static final long RANDOM_FOURIER_SEED = 1337L;
     private static final int POLYNOMIAL_DEGREE = 2;
     private static final boolean USE_CLASS_WEIGHTING = true;
@@ -765,9 +753,14 @@ class LinearSVM implements Classifier {
     private final int maxEpochs;
     private final double minLearningRate;
     
-    // One weight vector and bias per class (one-vs-rest)
-    private double[][] weightVectors; // [class][feature]
-    private double[] biasTerms; // [class]
+    // One-vs-one strategy: store weight vectors for each pair
+    // For 10 classes, we have 45 pairs (10 choose 2)
+    // Store as: pairIndex -> (weightVector, bias)
+    // Pair (i,j) where i < j is stored at index = i * (2*NUM_CLASSES - i - 1) / 2 + j - i - 1
+    private double[][] weightVectors; // [pairIndex][feature]
+    private double[] biasTerms; // [pairIndex]
+    private int[][] pairMapping; // Maps (class1, class2) to pairIndex
+    private static final int NUM_PAIRS = (NUM_CLASSES * (NUM_CLASSES - 1)) / 2; // 45 pairs
     private int numFeatures;
     private int baseFeatureCount;
     private int rawFeatureCount;
@@ -810,8 +803,9 @@ class LinearSVM implements Classifier {
         initializeRandomFourierFeatures();
         int polynomialFeatureCount = ENABLE_POLYNOMIAL_FEATURES ? computePolynomialFeatureCount(baseFeatureCount) : 0;
         numFeatures = baseFeatureCount + randomFourierFeatureCount + polynomialFeatureCount;
-        weightVectors = new double[NUM_CLASSES][numFeatures];
-        biasTerms = new double[NUM_CLASSES];
+        weightVectors = new double[NUM_PAIRS][numFeatures];
+        biasTerms = new double[NUM_PAIRS];
+        initializePairMapping();
         
         // Normalize features using z-score normalization (standardization) for better SVM performance
         double[] featureMeans = computeFeatureMeans(trainingData);
@@ -820,32 +814,74 @@ class LinearSVM implements Classifier {
         storedStds = featureStds;
         List<DigitSample> normalizedData = normalizeFeaturesZScore(trainingData, featureMeans, featureStds);
         
-        // Train one binary classifier per class (one-vs-rest)
-        for (int classLabel = 0; classLabel < NUM_CLASSES; classLabel++) {
-            trainBinaryClassifier(normalizedData, classLabel);
+        // Train one binary classifier per pair (one-vs-one)
+        int pairIndex = 0;
+        for (int class1 = 0; class1 < NUM_CLASSES; class1++) {
+            for (int class2 = class1 + 1; class2 < NUM_CLASSES; class2++) {
+                trainBinaryClassifier(normalizedData, class1, class2, pairIndex);
+                pairIndex++;
+            }
         }
         
         this.isTrained = true;
     }
     
     /**
-     * Trains a binary classifier for one class (one-vs-rest).
+     * Initializes the mapping from (class1, class2) to pair index.
+     * For 10 classes, pairs are: (0,1), (0,2), ..., (0,9), (1,2), ..., (8,9)
+     * Total: 45 pairs
+     */
+    private void initializePairMapping() {
+        pairMapping = new int[NUM_CLASSES][NUM_CLASSES];
+        int pairIndex = 0;
+        for (int class1 = 0; class1 < NUM_CLASSES; class1++) {
+            for (int class2 = class1 + 1; class2 < NUM_CLASSES; class2++) {
+                pairMapping[class1][class2] = pairIndex;
+                pairMapping[class2][class1] = pairIndex; // Symmetric
+                pairIndex++;
+            }
+        }
+    }
+    
+    /**
+     * Gets the pair index for two classes.
+     */
+    private int getPairIndex(int class1, int class2) {
+        if (class1 > class2) {
+            int temp = class1;
+            class1 = class2;
+            class2 = temp;
+        }
+        return pairMapping[class1][class2];
+    }
+    
+    /**
+     * Trains a binary classifier for one pair (one-vs-one).
      * Uses Pegasos-style stochastic gradient descent for SVM optimization.
      * This is a proven algorithm for linear SVMs that converges well.
      */
-    private void trainBinaryClassifier(List<DigitSample> trainingData, int positiveClass) {
-        // Compute class weights for balanced learning
-        int positiveCount = 0;
-        int negativeCount = 0;
+    private void trainBinaryClassifier(List<DigitSample> trainingData, int class1, int class2, int pairIndex) {
+        // Filter training data to only include samples from class1 or class2
+        List<DigitSample> pairData = new ArrayList<>();
         for (DigitSample sample : trainingData) {
-            if (sample.getLabel() == positiveClass) {
-                positiveCount++;
-            } else {
-                negativeCount++;
+            int label = sample.getLabel();
+            if (label == class1 || label == class2) {
+                pairData.add(sample);
             }
         }
-        double classWeight = USE_CLASS_WEIGHTING && positiveCount > 0 && negativeCount > 0 ?
-            (double) negativeCount / positiveCount : 1.0;
+        
+        // Compute class weights for balanced learning
+        int class1Count = 0;
+        int class2Count = 0;
+        for (DigitSample sample : pairData) {
+            if (sample.getLabel() == class1) {
+                class1Count++;
+            } else {
+                class2Count++;
+            }
+        }
+        double classWeight = USE_CLASS_WEIGHTING && class1Count > 0 && class2Count > 0 ?
+            (double) class2Count / class1Count : 1.0;
         classWeight = Math.min(classWeight, 5.0); // Cap at 5x to avoid extreme weights
         
         // Initialize weights to zero
@@ -856,15 +892,14 @@ class LinearSVM implements Classifier {
         int snapshotCount = 0;
         
         // Prepare data
-        List<DigitSample> shuffledData = new ArrayList<>(trainingData);
-        int numSamples = trainingData.size();
+        List<DigitSample> shuffledData = new ArrayList<>(pairData);
+        int numSamples = pairData.size();
         int globalIteration = 0;
         
-        // Training with adaptive learning rate and weight averaging
+        // Pegasos-style training with adaptive learning rate (per-update schedule)
         for (int epoch = 1; epoch <= maxEpochs; epoch++) {
             Collections.shuffle(shuffledData);
             int numUpdates = 0;
-            long startTime = System.currentTimeMillis();
             
             // One epoch: process all samples
             for (DigitSample sample : shuffledData) {
@@ -874,7 +909,7 @@ class LinearSVM implements Classifier {
                 
                 double[] features = sample.getFeatures();
                 int label = sample.getLabel();
-                int binaryLabel = (label == positiveClass) ? 1 : -1;
+                int binaryLabel = (label == class1) ? 1 : -1; // class1 = +1, class2 = -1
                 
                 // Apply class weight: positive class gets higher weight if it's minority
                 double sampleWeight = (binaryLabel == 1) ? classWeight : 1.0;
@@ -886,7 +921,8 @@ class LinearSVM implements Classifier {
                 if (margin < 1.0) {
                     numUpdates++;
                     
-                    // Gradient step for hinge loss with class weighting
+                    // Step 1: Gradient step for hinge loss with class weighting
+                    // w = (1 - η*λ) * w + η * weight * y * x (when margin < 1)
                     double scale = 1.0 - learningRate * regularizationParameter;
                     double weightedLR = learningRate * sampleWeight;
                     for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) {
@@ -895,31 +931,44 @@ class LinearSVM implements Classifier {
                     }
                     bias = scale * bias + weightedLR * binaryLabel;
                 } else {
-                    // Regularization step: just apply weight decay
+                    // Step 2: Regularization step (when margin >= 1)
+                    // Just apply weight decay: w = (1 - η*λ) * w
                     double scale = 1.0 - learningRate * regularizationParameter;
                     for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) {
                         weights[featureIndex] *= scale;
                     }
                     bias *= scale;
                 }
+                
+                // Projection step: scale weights to ensure ||w|| <= 1/sqrt(λ)
+                // This is optional but can help stability
+                double weightNorm = 0.0;
+                for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) {
+                    weightNorm += weights[featureIndex] * weights[featureIndex];
+                }
+                weightNorm = Math.sqrt(weightNorm);
+                double maxNorm = 1.0 / Math.sqrt(regularizationParameter);
+                if (weightNorm > maxNorm) {
+                    double scale = maxNorm / weightNorm;
+                    for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) {
+                        weights[featureIndex] *= scale;
+                    }
+                }
             }
             
-            // Early stopping: less aggressive for better convergence
-            if (numUpdates < numSamples * 0.001 && epoch > 100) {
+            // Early stopping: if very few updates, model has converged
+            // More lenient threshold to allow longer training for better convergence
+            if (numUpdates < numSamples * 0.0003 && epoch > 10) {
                 break;
             }
             
-            // Average weights for stability (skip first few epochs)
-            if (epoch > 3) {
-                for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) {
-                    cumulativeWeights[featureIndex] += weights[featureIndex];
-                }
-                cumulativeBias += bias;
-                snapshotCount++;
+            for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) {
+                cumulativeWeights[featureIndex] += weights[featureIndex];
             }
+            cumulativeBias += bias;
+            snapshotCount++;
         }
         
-        // Use averaged weights if available
         if (snapshotCount > 0) {
             for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) {
                 weights[featureIndex] = cumulativeWeights[featureIndex] / snapshotCount;
@@ -927,8 +976,8 @@ class LinearSVM implements Classifier {
             bias = cumulativeBias / snapshotCount;
         }
         
-        weightVectors[positiveClass] = weights;
-        biasTerms[positiveClass] = bias;
+        weightVectors[pairIndex] = weights;
+        biasTerms[pairIndex] = bias;
     }
     
     /**
@@ -1036,30 +1085,42 @@ class LinearSVM implements Classifier {
         }
         normalizeVectorInPlace(normalizedFeatures);
         
-        // Compute decision values for all classes
-        double[] decisionValues = new double[NUM_CLASSES];
-        for (int classLabel = 0; classLabel < NUM_CLASSES; classLabel++) {
-            decisionValues[classLabel] = computeDecisionValue(normalizedFeatures, 
-                                                              weightVectors[classLabel], 
-                                                              biasTerms[classLabel]);
+        // One-vs-one: Run all pairwise classifiers and count votes
+        int[] votes = new int[NUM_CLASSES];
+        double[] confidences = new double[NUM_CLASSES];
+        
+        for (int class1 = 0; class1 < NUM_CLASSES; class1++) {
+            for (int class2 = class1 + 1; class2 < NUM_CLASSES; class2++) {
+                int pairIdx = getPairIndex(class1, class2);
+                double decisionValue = computeDecisionValue(normalizedFeatures,
+                                                           weightVectors[pairIdx],
+                                                           biasTerms[pairIdx]);
+                
+                // Positive decision value means class1 wins, negative means class2 wins
+                if (decisionValue > 0) {
+                    votes[class1]++;
+                    confidences[class1] += Math.max(0, decisionValue);
+                } else {
+                    votes[class2]++;
+                    confidences[class2] += Math.max(0, -decisionValue);
+                }
+            }
         }
         
-        // Find class with highest decision value (one-vs-rest)
+        // Find class with most votes (one-vs-one voting)
         int predictedClass = 0;
-        double maxDecisionValue = decisionValues[0];
+        int maxVotes = votes[0];
         for (int classLabel = 1; classLabel < NUM_CLASSES; classLabel++) {
-            if (decisionValues[classLabel] > maxDecisionValue) {
-                maxDecisionValue = decisionValues[classLabel];
+            if (votes[classLabel] > maxVotes || 
+                (votes[classLabel] == maxVotes && confidences[classLabel] > confidences[predictedClass])) {
+                maxVotes = votes[classLabel];
                 predictedClass = classLabel;
             }
         }
         
-        // Convert decision value to confidence (using softmax-like transformation)
-        double sumExp = 0.0;
-        for (int classLabel = 0; classLabel < NUM_CLASSES; classLabel++) {
-            sumExp += Math.exp(decisionValues[classLabel] - maxDecisionValue);
-        }
-        double confidence = Math.exp(decisionValues[predictedClass] - maxDecisionValue) / sumExp;
+        // Convert votes to confidence
+        double totalVotes = NUM_CLASSES - 1; // Each class participates in 9 comparisons
+        double confidence = (double) votes[predictedClass] / totalVotes;
         
         return new ClassificationResult(predictedClass, confidence);
     }
@@ -1101,8 +1162,9 @@ class LinearSVM implements Classifier {
     
     private int computePolynomialFeatureCount(int baseCount) {
         // For degree 2: include all pairwise products (x_i * x_j where i <= j)
-        // Balanced polynomial features for ~96% accuracy
-        int maxPolyFeatures = Math.min(1024, baseCount * (baseCount + 1) / 2);
+        // This gives us baseCount + baseCount*(baseCount+1)/2 features
+        // But to keep it manageable, we'll use a subset: top features only
+        int maxPolyFeatures = Math.min(768, baseCount * (baseCount + 1) / 2);
         return maxPolyFeatures;
     }
     
@@ -1622,4 +1684,3 @@ class EvaluationMetrics {
         return accuracy;
     }
 }
-
