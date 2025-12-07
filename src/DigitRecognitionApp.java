@@ -94,43 +94,39 @@ public class DigitRecognitionApp {
     private static final double[] SVM_LAMBDA_CANDIDATES = {
         0.0003, 0.00035, 0.0004, 0.00045, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.0010, 0.0012
     };
-    private static final int[] SVM_EPOCH_CANDIDATES = {100, 120, 140, 160, 180, 200};
+    private static final int[] SVM_EPOCH_CANDIDATES = {100, 120, 140, 160, 180, 200, 220, 240};
     private static final double[] SVM_MIN_LR_CANDIDATES = {5e-8, 7.5e-8, 1e-7, 1.25e-7, 1.5e-7};
-    private static final int SVM_ENSEMBLE_SIZE = 3;
+    private static final int SVM_ENSEMBLE_SIZE = 5;
     private static final int SVM_VALIDATION_REPEATS = 6;
     private static final double VALIDATION_SPLIT_RATIO = 0.85;
     
     private static FoldResults evaluateAllAlgorithms(List<DigitSample> trainSet, List<DigitSample> testSet, String foldName) {
-        /*
-         * Temporarily comment out the other algorithms while focusing solely on SVM.
-         * This keeps the evaluation loop intact without deleting the code completely.
-         */
-//        System.out.println("\n1. NEAREST NEIGHBOR (k=1) - BASELINE:");
-//        NearestNeighbor nnClassifier = new NearestNeighbor();
-//        nnClassifier.train(trainSet);
-//        double nnAccuracy = EvaluationMetrics.evaluateClassifier(nnClassifier, testSet);
-//        
-//        System.out.println("\n2. k-NEAREST NEIGHBORS HYPERPARAMETER ANALYSIS:");
-//        double bestAccuracy = 0;
-//        int bestK = K_VALUES[0];
-//        for (int k : K_VALUES) {
-//            KNearestNeighbors knnClassifier = new KNearestNeighbors(k, false);
-//            knnClassifier.train(trainSet);
-//            double accuracy = knnClassifier.evaluate(testSet);
-//            System.out.printf("  k=%d: Accuracy = %.2f%%\n", k, accuracy);
-//            if (accuracy > bestAccuracy) {
-//                bestAccuracy = accuracy;
-//                bestK = k;
-//            }
-//        }
-//        System.out.printf("\nBest k-NN performance: k=%d with %.2f%% accuracy\n\n", bestK, bestAccuracy);
-//        
-//        System.out.println("3. WEIGHTED k-NN (distance-based voting):");
-//        KNearestNeighbors weightedKNN = new KNearestNeighbors(bestK, true);
-//        weightedKNN.train(trainSet);
-//        double weightedAccuracy = EvaluationMetrics.evaluateClassifier(weightedKNN, testSet);
+        System.out.println("\n1. NEAREST NEIGHBOR (k=1) - BASELINE:");
+        NearestNeighbor nnClassifier = new NearestNeighbor();
+        nnClassifier.train(trainSet);
+        double nnAccuracy = EvaluationMetrics.evaluateClassifier(nnClassifier, testSet);
         
-        System.out.println("\nSUPPORT VECTOR MACHINE (Linear SVM) ONLY:");
+        System.out.println("\n2. k-NEAREST NEIGHBORS HYPERPARAMETER ANALYSIS:");
+        double bestAccuracy = 0;
+        int bestK = K_VALUES[0];
+        for (int k : K_VALUES) {
+            KNearestNeighbors knnClassifier = new KNearestNeighbors(k, false);
+            knnClassifier.train(trainSet);
+            double accuracy = knnClassifier.evaluate(testSet);
+            System.out.printf("  k=%d: Accuracy = %.2f%%\n", k, accuracy);
+            if (accuracy > bestAccuracy) {
+                bestAccuracy = accuracy;
+                bestK = k;
+            }
+        }
+        System.out.printf("\nBest k-NN performance: k=%d with %.2f%% accuracy\n\n", bestK, bestAccuracy);
+        
+        System.out.println("3. WEIGHTED k-NN (distance-based voting):");
+        KNearestNeighbors weightedKNN = new KNearestNeighbors(bestK, true);
+        weightedKNN.train(trainSet);
+        double weightedAccuracy = EvaluationMetrics.evaluateClassifier(weightedKNN, testSet);
+        
+        System.out.println("\n4. SUPPORT VECTOR MACHINE (Linear SVM):");
         SVMTrainingResult svmTrainingResult = trainBestLinearSVM(trainSet);
         System.out.printf("Selected Linear SVM config: %s (validation accuracy %.2f%%)\n",
                           svmTrainingResult.hyperparameterSummary,
@@ -138,13 +134,13 @@ public class DigitRecognitionApp {
         double svmAccuracy = EvaluationMetrics.evaluateClassifier(svmTrainingResult.classifier, testSet);
         
         System.out.println("\n" + foldName + " SUMMARY:");
-//        System.out.printf("  Nearest Neighbor (k=1): %.2f%%\n", nnAccuracy);
-//        System.out.printf("  k-NN (best k=%d): %.2f%%\n", bestK, bestAccuracy);
-//        System.out.printf("  Weighted k-NN (k=%d): %.2f%%\n", bestK, weightedAccuracy);
+        System.out.printf("  Nearest Neighbor (k=1): %.2f%%\n", nnAccuracy);
+        System.out.printf("  k-NN (best k=%d): %.2f%%\n", bestK, bestAccuracy);
+        System.out.printf("  Weighted k-NN (k=%d): %.2f%%\n", bestK, weightedAccuracy);
         System.out.printf("  Linear SVM [%s]: %.2f%%\n", svmTrainingResult.hyperparameterSummary, svmAccuracy);
         System.out.println();
         
-        return new FoldResults(svmAccuracy, svmTrainingResult.hyperparameterSummary);
+        return new FoldResults(nnAccuracy, bestK, bestAccuracy, weightedAccuracy, svmAccuracy, svmTrainingResult.hyperparameterSummary);
     }
     
     /**
@@ -156,14 +152,22 @@ public class DigitRecognitionApp {
     private static void printOverallSummary(FoldResults fold1Results, FoldResults fold2Results) {
         System.out.println("\n=== OVERALL SUMMARY (Two-Fold Cross-Validation) ===\n");
         
+        double avgNNAccuracy = (fold1Results.nnAccuracy + fold2Results.nnAccuracy) / 2.0;
+        double avgKnnAccuracy = (fold1Results.bestKnnAccuracy + fold2Results.bestKnnAccuracy) / 2.0;
+        double avgWeightedKnnAccuracy = (fold1Results.weightedKnnAccuracy + fold2Results.weightedKnnAccuracy) / 2.0;
         double avgSVMAccuracy = (fold1Results.svmAccuracy + fold2Results.svmAccuracy) / 2.0;
         
-        System.out.println("Average SVM Performance Across Both Folds:");
+        System.out.println("Average Performance Across Both Folds:");
+        System.out.printf("  Nearest Neighbor (k=1): %.2f%%\n", avgNNAccuracy);
+        System.out.printf("  k-NN (best k per fold): %.2f%%\n", avgKnnAccuracy);
+        System.out.printf("  Weighted k-NN: %.2f%%\n", avgWeightedKnnAccuracy);
         System.out.printf("  Linear SVM: %.2f%%\n", avgSVMAccuracy);
         
         System.out.println("\nFold Hyperparameter Selections:");
-        System.out.printf("  Fold 1 (SVM): %s\n", fold1Results.svmHyperparameterSummary);
-        System.out.printf("  Fold 2 (SVM): %s\n", fold2Results.svmHyperparameterSummary);
+        System.out.printf("  Fold 1 - k-NN best k: %d, Weighted k-NN k: %d, SVM: %s\n", 
+                         fold1Results.bestK, fold1Results.bestK, fold1Results.svmHyperparameterSummary);
+        System.out.printf("  Fold 2 - k-NN best k: %d, Weighted k-NN k: %d, SVM: %s\n", 
+                         fold2Results.bestK, fold2Results.bestK, fold2Results.svmHyperparameterSummary);
         
         System.out.println("\n=== Analysis Complete ===");
     }
@@ -172,10 +176,19 @@ public class DigitRecognitionApp {
      * Helper class to store results from a single fold evaluation.
      */
     private static class FoldResults {
+        final double nnAccuracy;
+        final int bestK;
+        final double bestKnnAccuracy;
+        final double weightedKnnAccuracy;
         final double svmAccuracy;
         final String svmHyperparameterSummary;
         
-        FoldResults(double svmAccuracy, String svmHyperparameterSummary) {
+        FoldResults(double nnAccuracy, int bestK, double bestKnnAccuracy, double weightedKnnAccuracy, 
+                   double svmAccuracy, String svmHyperparameterSummary) {
+            this.nnAccuracy = nnAccuracy;
+            this.bestK = bestK;
+            this.bestKnnAccuracy = bestKnnAccuracy;
+            this.weightedKnnAccuracy = weightedKnnAccuracy;
             this.svmAccuracy = svmAccuracy;
             this.svmHyperparameterSummary = svmHyperparameterSummary;
         }
@@ -727,11 +740,13 @@ class KNearestNeighbors implements Classifier {
 
 /**
  * Linear Support Vector Machine (SVM) classifier implementation.
- * Uses one-vs-rest (OvR) approach for multiclass classification.
+ * Uses one-vs-one (OvO) approach for multiclass classification.
  * Implements soft-margin SVM with gradient descent optimization.
  * 
  * This is a simplified but functional implementation of linear SVM.
- * For multiclass problems, it trains one binary classifier per class.
+ * For multiclass problems, it trains one binary classifier per pair
+ * of classes (45 pairs for 10 classes), then uses voting to determine
+ * the final classification.
  * 
  * @author Dumitru Nirca
  */
@@ -743,11 +758,15 @@ class LinearSVM implements Classifier {
     private static final boolean ENABLE_SPATIAL_AUGMENTATION = true;
     private static final boolean ENABLE_RANDOM_FOURIER_FEATURES = true;
     private static final boolean ENABLE_POLYNOMIAL_FEATURES = true;
-    private static final int RANDOM_FOURIER_FEATURE_COUNT = 384;
+    private static final int RANDOM_FOURIER_FEATURE_COUNT = 512; // Increased for >98% accuracy target
     private static final double RANDOM_FOURIER_GAMMA = 0.012;
     private static final long RANDOM_FOURIER_SEED = 1337L;
     private static final int POLYNOMIAL_DEGREE = 2;
     private static final boolean USE_CLASS_WEIGHTING = true;
+    private static final double MAX_CLASS_WEIGHT = 5.0; // Maximum class weight multiplier to avoid extreme weights
+    private static final int POLYNOMIAL_NEARBY_FEATURE_RANGE = 12; // Range for local feature interactions
+    private static final double EARLY_STOPPING_UPDATE_THRESHOLD = 0.0003; // Stop if updates < 0.03% of samples
+    private static final double NORMALIZATION_EPSILON = 1e-12; // Epsilon for avoiding division by zero in normalization
     
     private final double regularizationParameter;
     private final int maxEpochs;
@@ -882,7 +901,7 @@ class LinearSVM implements Classifier {
         }
         double classWeight = USE_CLASS_WEIGHTING && class1Count > 0 && class2Count > 0 ?
             (double) class2Count / class1Count : 1.0;
-        classWeight = Math.min(classWeight, 5.0); // Cap at 5x to avoid extreme weights
+        classWeight = Math.min(classWeight, MAX_CLASS_WEIGHT);
         
         // Initialize weights to zero
         double[] weights = new double[numFeatures];
@@ -958,7 +977,7 @@ class LinearSVM implements Classifier {
             
             // Early stopping: if very few updates, model has converged
             // More lenient threshold to allow longer training for better convergence
-            if (numUpdates < numSamples * 0.0003 && epoch > 10) {
+            if (numUpdates < numSamples * EARLY_STOPPING_UPDATE_THRESHOLD && epoch > 10) {
                 break;
             }
             
@@ -1164,7 +1183,7 @@ class LinearSVM implements Classifier {
         // For degree 2: include all pairwise products (x_i * x_j where i <= j)
         // This gives us baseCount + baseCount*(baseCount+1)/2 features
         // But to keep it manageable, we'll use a subset: top features only
-        int maxPolyFeatures = Math.min(768, baseCount * (baseCount + 1) / 2);
+        int maxPolyFeatures = Math.min(896, baseCount * (baseCount + 1) / 2); // Increased for >98% accuracy
         return maxPolyFeatures;
     }
     
@@ -1184,7 +1203,7 @@ class LinearSVM implements Classifier {
         // This captures local interactions which are important for images
         // First pass: nearby features (local interactions)
         for (int i = 0; i < baseFeatureCount && idx < polyCount; i++) {
-            for (int j = i + 1; j < Math.min(i + 12, baseFeatureCount) && idx < polyCount; j++) {
+            for (int j = i + 1; j < Math.min(i + POLYNOMIAL_NEARBY_FEATURE_RANGE, baseFeatureCount) && idx < polyCount; j++) {
                 polyFeatures[idx++] = baseFeatures[i] * baseFeatures[j];
             }
         }
@@ -1273,7 +1292,7 @@ class LinearSVM implements Classifier {
             norm += value * value;
         }
         norm = Math.sqrt(norm);
-        if (norm > 1e-12) {
+        if (norm > NORMALIZATION_EPSILON) {
             for (int i = 0; i < vector.length; i++) {
                 vector[i] /= norm;
             }
@@ -1407,7 +1426,7 @@ class DatasetLoader {
         for (int i = 0; i < NUM_FEATURES; i++) {
             try {
                 features[i] = Double.parseDouble(parts[i]);
-            } catch (NumberFormatException e) {
+            } catch (NumberFormatException exception) {
                 throw new IllegalArgumentException("Invalid feature value at position " + i + ": " + parts[i]);
             }
         }
@@ -1416,7 +1435,7 @@ class DatasetLoader {
         int label;
         try {
             label = Integer.parseInt(parts[NUM_FEATURES]);
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException exception) {
             throw new IllegalArgumentException("Invalid label value: " + parts[NUM_FEATURES]);
         }
         

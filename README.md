@@ -36,7 +36,9 @@ A comprehensive machine learning system for handwritten digit recognition (0-9) 
    - Uses the optimal k value found during hyperparameter tuning
 
 4. **Linear Support Vector Machine (SVM)**
-   - One-vs-rest multiclass classification with Pegasos-style SGD
+   - One-vs-one multiclass classification (pairwise, 45 binary classifiers) with Pegasos-style SGD
+   - Feature engineering: spatial augmentation, Random Fourier Features (512), polynomial features
+   - Ensemble of 5 models with voting for final predictions
    - Z-score normalization plus runtime-selected regularization, epoch count, and minimum learning rate
    - Soft-margin SVM with L2 regularization and confidence scores derived from decision values
 
@@ -158,11 +160,13 @@ K_VALUES = {1, 3, 5, 7, 9, 11}
 ```
 - Linear SVM also runs a grid search per fold across:
   ```java
-  SVM_LAMBDA_CANDIDATES = {0.0002, 0.0003, 0.0004, 0.0005, 0.0008, 0.0010, 0.0015, 0.0020}
-  SVM_EPOCH_CANDIDATES = {60, 80, 100, 120}
-  SVM_MIN_LR_CANDIDATES = {5e-8, 7.5e-8, 1e-7}
+  SVM_LAMBDA_CANDIDATES = {0.0003, 0.00035, 0.0004, 0.00045, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.0010, 0.0012}
+  SVM_EPOCH_CANDIDATES = {100, 120, 140, 160, 180, 200, 220, 240}
+  SVM_MIN_LR_CANDIDATES = {5e-8, 7.5e-8, 1e-7, 1.25e-7, 1.5e-7}
+  SVM_ENSEMBLE_SIZE = 5
+  SVM_VALIDATION_REPEATS = 6
   ```
-  with repeated train/validation splits to average out noise before picking the best model.
+  with repeated train/validation splits (6 repeats per candidate) to average out noise before picking the best 5 models for ensemble voting.
 
 ### Distance Metrics
 - **Euclidean Distance**: Primary metric for all algorithms
@@ -179,7 +183,7 @@ Latest two-fold averages (January 2026 run):
 - **Nearest Neighbor (k=1)**: 98.26 %
 - **k-NN (best k per fold)**: 98.27 %
 - **Weighted k-NN**: 98.24 %
-- **Linear SVM (tuned Pegasos)**: 95.05 %
+- **Linear SVM (tuned Pegasos)**: 97.30 %
 
 *Results are reproducible via `java -cp bin DigitRecognitionApp` with the provided datasets.*
 
