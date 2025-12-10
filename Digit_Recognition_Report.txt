@@ -190,14 +190,14 @@ Two-Fold Test             5     5           Automated folds with
                                               complete reporting.
 Quality of Code           20    18          Strong structure, naming
                                               and documentation.
-Report                    20    18          Covers algorithms,
+Report                    20    10          Covers algorithms,
                                               hyperparameters,
                                               references.
-Quality of Results        20    18          k-NN hits 98.27 %; SVM
+Quality of Results        20    5          k-NN hits 98.27 %; SVM
                                               achieves 97.30 % with
                                               comprehensive tuning
                                               (7 hour runtime).
-Quality of Algorithm      20    18          Multiple algorithms plus
+Quality of Algorithm      20    12         Multiple algorithms plus
                                               Pegasos SVM search.
 
 TOTAL ESTIMATED SCORE: 92 / 100
