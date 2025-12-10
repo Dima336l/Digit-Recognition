@@ -165,14 +165,14 @@ public class DigitRecognitionApp {
         System.out.println("\n2. k-NEAREST NEIGHBORS HYPERPARAMETER ANALYSIS:");
         double bestAccuracy = 0;
         int bestK = K_VALUES[0];
-        for (int k : K_VALUES) {
-            KNearestNeighbors knnClassifier = new KNearestNeighbors(k, false);
+        for (int numNeighbors : K_VALUES) {
+            KNearestNeighbors knnClassifier = new KNearestNeighbors(numNeighbors, false);
             knnClassifier.train(trainSet);
             double accuracy = knnClassifier.evaluate(testSet);
-            System.out.printf("  k=%d: Accuracy = %.2f%%\n", k, accuracy);
+            System.out.printf("  k=%d: Accuracy = %.2f%%\n", numNeighbors, accuracy);
             if (accuracy > bestAccuracy) {
                 bestAccuracy = accuracy;
-                bestK = k;
+                bestK = numNeighbors;
             }
         }
         System.out.printf("\nBest k-NN performance: k=%d with %.2f%% accuracy\n\n", bestK, bestAccuracy);
@@ -182,8 +182,8 @@ public class DigitRecognitionApp {
     /**
      * Gets accuracy for k-NN with specified k value.
      */
-    private static double getKnnAccuracy(ArrayList<DigitSample> trainSet, ArrayList<DigitSample> testSet, int k) {
-        KNearestNeighbors knnClassifier = new KNearestNeighbors(k, false);
+    private static double getKnnAccuracy(ArrayList<DigitSample> trainSet, ArrayList<DigitSample> testSet, int numNeighbors) {
+        KNearestNeighbors knnClassifier = new KNearestNeighbors(numNeighbors, false);
         knnClassifier.train(trainSet);
         return knnClassifier.evaluate(testSet);
     }
@@ -191,9 +191,9 @@ public class DigitRecognitionApp {
     /**
      * Evaluates weighted k-NN classifier with distance-based voting.
      */
-    private static double evaluateWeightedKNN(ArrayList<DigitSample> trainSet, ArrayList<DigitSample> testSet, int k) {
+    private static double evaluateWeightedKNN(ArrayList<DigitSample> trainSet, ArrayList<DigitSample> testSet, int numNeighbors) {
         System.out.println("3. WEIGHTED k-NN (distance-based voting):");
-        KNearestNeighbors weightedKNN = new KNearestNeighbors(k, true);
+        KNearestNeighbors weightedKNN = new KNearestNeighbors(numNeighbors, true);
         weightedKNN.train(trainSet);
         return EvaluationMetrics.evaluateClassifier(weightedKNN, testSet);
     }
@@ -315,8 +315,8 @@ public class DigitRecognitionApp {
                                                          ArrayList<HyperparameterCandidate> candidates) {
         ArrayList<LinearSVM> models = new ArrayList<>();
         int modelsToTrain = Math.min(SVM_ENSEMBLE_SIZE, candidates.size());
-        for (int i = 0; i < modelsToTrain; i++) {
-            HyperparameterCandidate candidate = candidates.get(i);
+        for (int modelIndex = 0; modelIndex < modelsToTrain; modelIndex++) {
+            HyperparameterCandidate candidate = candidates.get(modelIndex);
             LinearSVM model = new LinearSVM(candidate.lambda, candidate.epochs, candidate.minLearningRate);
             model.train(trainingData);
             models.add(model);
@@ -333,8 +333,8 @@ public class DigitRecognitionApp {
         String summaryText;
         double referenceAccuracy = candidates.isEmpty() ? ZERO : candidates.get(0).validationAccuracy;
         ArrayList<String> summaries = new ArrayList<>();
-        for (int i = 0; i < ensembleModels.size(); i++) {
-            summaries.add(candidates.get(i).describe());
+        for (int modelIndex = 0; modelIndex < ensembleModels.size(); modelIndex++) {
+            summaries.add(candidates.get(modelIndex).describe());
         }
         if (ensembleModels.size() == 1) {
             classifier = ensembleModels.get(0);
@@ -466,36 +466,18 @@ class DigitSample {
         this.label = label;
     }
     
-    /**
-     * Gets the feature vector for this sample.
-     * 
-     * @return A copy of the feature array to maintain immutability
-     */
-    public double[] getFeatures() {
+    public double[] getFeatures() { // Returns a copy to maintain immutability
         return features.clone();
     }
     
-    /**
-     * Gets the label for this sample.
-     * 
-     * @return The digit label (0-9)
-     */
     public int getLabel() {
         return label;
     }
     
-    /**
-     * Gets the number of features in this sample.
-     * 
-     * @return The feature vector length (should be 64)
-     */
     public int getFeatureCount() {
         return features.length;
     }
     
-    /**
-     * Returns a string representation of this sample.
-     */
     @Override
     public String toString() {
         return String.format("DigitSample{label=%d, features=%d}", label, features.length);
@@ -536,45 +518,22 @@ class ClassificationResult {
         this.distances = distances != null ? distances.clone() : null;
     }
     
-    /**
-     * Gets the predicted label.
-     * 
-     * @return The predicted digit (0-9)
-     */
     public int getPredictedLabel() {
         return predictedLabel;
     }
     
-    /**
-     * Gets the confidence score.
-     * 
-     * @return Confidence value between 0.0 and 1.0
-     */
     public double getConfidence() {
         return confidence;
     }
     
-    /**
-     * Gets the distance information if available.
-     * 
-     * @return Array of distances or null if not available
-     */
-    public double[] getDistances() {
+    public double[] getDistances() { // Returns a copy or null
         return distances != null ? distances.clone() : null;
     }
     
-    /**
-     * Checks if distance information is available.
-     * 
-     * @return true if distances are available, false otherwise
-     */
     public boolean hasDistances() {
         return distances != null;
     }
     
-    /**
-     * Returns a string representation of this classification result.
-     */
     @Override
     public String toString() {
         return String.format("ClassificationResult{predicted=%d, confidence=%.3f}", 
@@ -602,20 +561,10 @@ class NeighborDistance implements Comparable<NeighborDistance> {
         this.distance = distance;
     }
     
-    /**
-     * Gets the label of this neighbor.
-     * 
-     * @return The class label
-     */
     public int getLabel() {
         return label;
     }
     
-    /**
-     * Gets the distance of this neighbor from the query point.
-     * 
-     * @return The distance value
-     */
     public double getDistance() {
         return distance;
     }
@@ -632,17 +581,11 @@ class NeighborDistance implements Comparable<NeighborDistance> {
         return Double.compare(this.distance, other.distance);
     }
     
-    /**
-     * Returns a string representation of this neighbor distance.
-     */
     @Override
     public String toString() {
         return String.format("NeighborDistance{label=%d, distance=%.3f}", label, distance);
     }
     
-    /**
-     * Checks equality based on label and distance.
-     */
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
@@ -653,9 +596,6 @@ class NeighborDistance implements Comparable<NeighborDistance> {
                Double.compare(that.distance, distance) == 0;
     }
     
-    /**
-     * Computes hash code based on label and distance.
-     */
     @Override
     public int hashCode() {
         int result = label;
@@ -754,28 +694,28 @@ class NearestNeighbor implements Classifier {
 class KNearestNeighbors implements Classifier {
     private static final int NUM_CLASSES = 10;
     
-    private final int k;
+    private final int numNeighbors;
     private final boolean weighted;
     private ArrayList<DigitSample> trainingData;
     
     /**
      * Creates a k-NN classifier with the specified parameters.
      * 
-     * @param k Number of neighbors to consider
+     * @param numNeighbors Number of neighbors to consider
      * @param weighted Whether to use distance-weighted voting
      */
-    public KNearestNeighbors(int k, boolean weighted) {
-        this.k = k;
+    public KNearestNeighbors(int numNeighbors, boolean weighted) {
+        this.numNeighbors = numNeighbors;
         this.weighted = weighted;
     }
     
     /**
      * Creates a k-NN classifier with majority voting (non-weighted).
      * 
-     * @param k Number of neighbors to consider
+     * @param numNeighbors Number of neighbors to consider
      */
-    public KNearestNeighbors(int k) {
-        this(k, false);
+    public KNearestNeighbors(int numNeighbors) {
+        this(numNeighbors, false);
     }
     
     @Override
@@ -801,7 +741,7 @@ class KNearestNeighbors implements Classifier {
         
         // Sort by distance and take k nearest neighbors
         CustomCollections.sort(distances);
-        ArrayList<NeighborDistance> kNearest = new ArrayList<>(distances.subList(0, Math.min(k, distances.size())));
+        ArrayList<NeighborDistance> kNearest = new ArrayList<>(distances.subList(0, Math.min(numNeighbors, distances.size())));
         
         // Vote for class label
         if (weighted) {
@@ -823,10 +763,10 @@ class KNearestNeighbors implements Classifier {
         
         int maxVotes = 0;
         int predictedLabel = 0;
-        for (int i = 0; i < NUM_CLASSES; i++) {
-            if (votes[i] > maxVotes) {
-                maxVotes = votes[i];
-                predictedLabel = i;
+        for (int classLabel = 0; classLabel < NUM_CLASSES; classLabel++) {
+            if (votes[classLabel] > maxVotes) {
+                maxVotes = votes[classLabel];
+                predictedLabel = classLabel;
             }
         }
         
@@ -850,11 +790,11 @@ class KNearestNeighbors implements Classifier {
         int predictedLabel = 0;
         double totalWeight = 0;
         
-        for (int i = 0; i < NUM_CLASSES; i++) {
-            totalWeight += weights[i];
-            if (weights[i] > maxWeight) {
-                maxWeight = weights[i];
-                predictedLabel = i;
+        for (int classLabel = 0; classLabel < NUM_CLASSES; classLabel++) {
+            totalWeight += weights[classLabel];
+            if (weights[classLabel] > maxWeight) {
+                maxWeight = weights[classLabel];
+                predictedLabel = classLabel;
             }
         }
         
@@ -865,9 +805,9 @@ class KNearestNeighbors implements Classifier {
     @Override
     public String getAlgorithmName() {
         if (weighted) {
-            return String.format("Weighted k-NN (k=%d)", k);
+            return String.format("Weighted k-NN (k=%d)", numNeighbors);
         } else {
-            return String.format("k-NN (k=%d)", k);
+            return String.format("k-NN (k=%d)", numNeighbors);
         }
     }
     
@@ -877,7 +817,7 @@ class KNearestNeighbors implements Classifier {
      * @return The number of neighbors considered
      */
     public int getK() {
-        return k;
+        return numNeighbors;
     }
     
     /**
@@ -1144,39 +1084,23 @@ class LinearSVM implements Classifier {
      */
     private PegasosEpochResult runEpoch(ArrayList<DigitSample> data, int class1, double classWeight,
                                         double[] weights, double bias, int globalIterStart) {
-        int updates = 0; // Count of samples that triggered weight updates (margin < 1)
-        int globalIter = globalIterStart; // Track total iterations across all epochs
+        int updates = 0; // Samples that triggered weight updates
+        int globalIter = globalIterStart; // Track total iterations
         
-        // Process each sample in the shuffled dataset
         for (DigitSample sample : data) {
-            globalIter++; // Increment global iteration counter for learning rate schedule
+            globalIter++;
+            double lr = Math.max(minLearningRate, 1.0 / (regularizationParameter * globalIter)); // Adaptive LR: 1/(λ*t)
+            int binaryLabel = (sample.getLabel() == class1) ? BINARY_POSITIVE_LABEL : BINARY_NEGATIVE_LABEL; // Binary label
+            double sampleWeight = (binaryLabel == BINARY_POSITIVE_LABEL) ? classWeight : ONE; // Class weighting
+            double margin = binaryLabel * computeDecisionValue(sample.getFeatures(), weights, bias); // Margin: y*(w·x+b)
             
-            // Adaptive learning rate: decreases as 1/(λ*t), clamped to minimum
-            // This ensures convergence while preventing too-small updates
-            double lr = Math.max(minLearningRate, 1.0 / (regularizationParameter * globalIter));
-            
-            // Convert multi-class label to binary: class1 = +1, other = -1
-                int binaryLabel = (sample.getLabel() == class1) ? BINARY_POSITIVE_LABEL : BINARY_NEGATIVE_LABEL;
-            
-            // Apply class weighting: positive class gets higher weight if it's minority
-            double sampleWeight = (binaryLabel == BINARY_POSITIVE_LABEL) ? classWeight : ONE;
-            
-            // Compute margin: y * (w·x + b). Positive margin = correct classification
-            double margin = binaryLabel * computeDecisionValue(sample.getFeatures(), weights, bias);
-            
-            // Hinge loss active: if margin < 1, sample is misclassified or too close to boundary
-            if (margin < MARGIN_THRESHOLD) {
-                updates++; // Count this as an update
-                // Apply gradient step: update weights and bias based on hinge loss
-                bias = gradientStep(weights, bias, lr, sampleWeight, binaryLabel, sample.getFeatures());
+            if (margin < MARGIN_THRESHOLD) { // Hinge loss active
+                updates++;
+                bias = gradientStep(weights, bias, lr, sampleWeight, binaryLabel, sample.getFeatures()); // Gradient step
             } else {
-                // Margin >= 1: sample is correctly classified with sufficient margin
-                // Only apply weight decay (regularization), no gradient update
-                bias = decayOnly(weights, bias, lr);
+                bias = decayOnly(weights, bias, lr); // Margin satisfied, only decay
             }
-            
-            // Project weights to ensure ||w|| <= 1/sqrt(λ) for stability
-            enforceMaxNorm(weights);
+            enforceMaxNorm(weights); // Project ||w|| <= 1/sqrt(λ)
         }
         
         return new PegasosEpochResult(updates, bias);
@@ -1186,37 +1110,37 @@ class LinearSVM implements Classifier {
     private double gradientStep(double[] weights, double bias, double lr, double sampleWeight, int label, double[] features) {
         double scale = 1.0 - lr * regularizationParameter;
         double wlr = lr * sampleWeight;
-        for (int i = 0; i < numFeatures; i++) weights[i] = scale * weights[i] + wlr * label * features[i];
+        for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) weights[featureIndex] = scale * weights[featureIndex] + wlr * label * features[featureIndex];
         return scale * bias + wlr * label;
     }
     
     /** Applies decay when margin is satisfied. */
     private double decayOnly(double[] weights, double bias, double lr) {
         double scale = 1.0 - lr * regularizationParameter;
-        for (int i = 0; i < numFeatures; i++) weights[i] *= scale;
+        for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) weights[featureIndex] *= scale;
         return bias * scale;
     }
     
     /** Keeps weights within max norm for stability. */
     private void enforceMaxNorm(double[] weights) {
         double norm = 0.0;
-        for (double w : weights) norm += w * w;
+        for (double weight : weights) norm += weight * weight;
         norm = Math.sqrt(norm);
         double maxNorm = ONE / Math.sqrt(regularizationParameter);
         if (norm > maxNorm) {
             double scale = maxNorm / norm;
-            for (int i = 0; i < numFeatures; i++) weights[i] *= scale;
+            for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) weights[featureIndex] *= scale;
         }
     }
     
     /** Accumulates weights for averaging. */
     private void accumulateSnapshot(double[] weights, double[] cumulative) {
-        for (int i = 0; i < numFeatures; i++) cumulative[i] += weights[i];
+        for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) cumulative[featureIndex] += weights[featureIndex];
     }
     
     /** Averages snapshots to produce final weights and bias. */
     private double averageWeights(double[] weights, double[] cumulative, double cumulativeBias, int snapshots) {
-        for (int i = 0; i < numFeatures; i++) weights[i] = cumulative[i] / snapshots;
+        for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) weights[featureIndex] = cumulative[featureIndex] / snapshots;
         return cumulativeBias / snapshots;
     }
 
@@ -1246,9 +1170,6 @@ class LinearSVM implements Classifier {
         }
     }
     
-    /**
-     * Computes the decision value for a feature vector.
-     */
     private double computeDecisionValue(double[] features, double[] weights, double bias) {
         double result = bias;
         for (int featureIndex = 0; featureIndex < numFeatures; featureIndex++) {
@@ -1398,19 +1319,13 @@ class LinearSVM implements Classifier {
         }
     }
     
-    /**
-     * Finds winning class and creates classification result.
-     */
     private ClassificationResult createClassificationResult(VotingResult voting) {
         int predictedClass = findWinningClass(voting.votes, voting.confidences);
         double confidence = computeConfidence(voting.votes[predictedClass]);
         return new ClassificationResult(predictedClass, confidence);
     }
     
-    /**
-     * Finds class with most votes (with confidence tie-breaking).
-     */
-    private int findWinningClass(int[] votes, double[] confidences) {
+    private int findWinningClass(int[] votes, double[] confidences) { // With confidence tie-breaking
         int predictedClass = 0;
         int maxVotes = votes[0];
         for (int classLabel = 1; classLabel < NUM_CLASSES; classLabel++) {
@@ -1423,9 +1338,6 @@ class LinearSVM implements Classifier {
         return predictedClass;
     }
     
-    /**
-     * Computes confidence score from vote count.
-     */
     private double computeConfidence(int voteCount) {
         double totalVotes = NUM_CLASSES - 1; // Each class participates in 9 comparisons
         return (double) voteCount / totalVotes;
@@ -1466,17 +1378,11 @@ class LinearSVM implements Classifier {
         return augmented;
     }
     
-    /**
-     * Copies base features into augmented array.
-     */
     private int copyBaseFeatures(double[] baseFeatures, double[] augmented, int offset) {
         System.arraycopy(baseFeatures, 0, augmented, offset, baseFeatureCount);
         return offset + baseFeatureCount;
     }
     
-    /**
-     * Copies random Fourier features if enabled.
-     */
     private int copyRandomFourierFeatures(double[] originalFeatures, double[] augmented, int offset) {
         if (useRandomFourierFeatures) {
             double[] randomFeatures = computeRandomFourierFeatures(originalFeatures);
@@ -1486,9 +1392,6 @@ class LinearSVM implements Classifier {
         return offset;
     }
     
-    /**
-     * Copies polynomial features if enabled.
-     */
     private void copyPolynomialFeatures(double[] baseFeatures, double[] augmented, int offset) {
         if (ENABLE_POLYNOMIAL_FEATURES) {
             double[] polyFeatures = computePolynomialFeatures(baseFeatures);
@@ -1516,40 +1419,31 @@ class LinearSVM implements Classifier {
         return polyFeatures;
     }
     
-    /**
-     * Adds squared features (x_i^2) to polynomial array.
-     */
     private int addSquaredFeatures(double[] baseFeatures, double[] polyFeatures, int polyCount) {
         int idx = 0;
         int maxSquared = Math.min(baseFeatureCount, (int)(polyCount / POLYNOMIAL_COUNT_DIVISOR));
-        for (int i = 0; i < maxSquared; i++) {
-            polyFeatures[idx++] = baseFeatures[i] * baseFeatures[i];
+        for (int featureIndex = 0; featureIndex < maxSquared; featureIndex++) {
+            polyFeatures[idx++] = baseFeatures[featureIndex] * baseFeatures[featureIndex];
         }
         return idx;
     }
     
-    /**
-     * Adds nearby pairwise products (local interactions).
-     */
     private int addNearbyProducts(double[] baseFeatures, double[] polyFeatures, int idx, int polyCount) {
-        for (int i = 0; i < baseFeatureCount && idx < polyCount; i++) {
-            int maxJ = Math.min(i + POLYNOMIAL_NEARBY_FEATURE_RANGE, baseFeatureCount);
-            for (int j = i + 1; j < maxJ && idx < polyCount; j++) {
-                polyFeatures[idx++] = baseFeatures[i] * baseFeatures[j];
+        for (int firstFeatureIndex = 0; firstFeatureIndex < baseFeatureCount && idx < polyCount; firstFeatureIndex++) {
+            int maxSecondIndex = Math.min(firstFeatureIndex + POLYNOMIAL_NEARBY_FEATURE_RANGE, baseFeatureCount);
+            for (int secondFeatureIndex = firstFeatureIndex + 1; secondFeatureIndex < maxSecondIndex && idx < polyCount; secondFeatureIndex++) {
+                polyFeatures[idx++] = baseFeatures[firstFeatureIndex] * baseFeatures[secondFeatureIndex];
             }
         }
         return idx;
     }
     
-    /**
-     * Adds distant pairwise products (global interactions).
-     */
     private void addDistantProducts(double[] baseFeatures, double[] polyFeatures, int idx, int polyCount) {
         if (idx >= polyCount) return;
             int step = Math.max(INT_ONE, baseFeatureCount / POLYNOMIAL_STEP_DIVISOR);
-        for (int i = 0; i < baseFeatureCount && idx < polyCount; i += step) {
-            for (int j = i + step; j < baseFeatureCount && idx < polyCount; j += step) {
-                polyFeatures[idx++] = baseFeatures[i] * baseFeatures[j];
+        for (int firstFeatureIndex = 0; firstFeatureIndex < baseFeatureCount && idx < polyCount; firstFeatureIndex += step) {
+            for (int secondFeatureIndex = firstFeatureIndex + step; secondFeatureIndex < baseFeatureCount && idx < polyCount; secondFeatureIndex += step) {
+                polyFeatures[idx++] = baseFeatures[firstFeatureIndex] * baseFeatures[secondFeatureIndex];
             }
         }
     }
@@ -1568,9 +1462,6 @@ class LinearSVM implements Classifier {
         return base;
     }
     
-    /**
-     * Adds row average features to base array.
-     */
     private int addRowAverages(double[] originalFeatures, double[] base, int offset) {
         for (int row = 0; row < gridSize; row++) {
             double sum = computeRowSum(originalFeatures, row);
@@ -1579,9 +1470,6 @@ class LinearSVM implements Classifier {
         return offset + gridSize;
     }
     
-    /**
-     * Computes sum of values in a row.
-     */
     private double computeRowSum(double[] features, int row) {
         double sum = 0.0;
         for (int col = 0; col < gridSize; col++) {
@@ -1590,9 +1478,6 @@ class LinearSVM implements Classifier {
         return sum;
     }
     
-    /**
-     * Adds column average features to base array.
-     */
     private void addColumnAverages(double[] originalFeatures, double[] base, int offset) {
         for (int col = 0; col < gridSize; col++) {
             double sum = computeColumnSum(originalFeatures, col);
@@ -1600,9 +1485,6 @@ class LinearSVM implements Classifier {
         }
     }
     
-    /**
-     * Computes sum of values in a column.
-     */
     private double computeColumnSum(double[] features, int col) {
         double sum = 0.0;
         for (int row = 0; row < gridSize; row++) {
@@ -1655,8 +1537,8 @@ class LinearSVM implements Classifier {
         }
         norm = Math.sqrt(norm);
         if (norm > NORMALIZATION_EPSILON) {
-            for (int i = 0; i < vector.length; i++) {
-                vector[i] /= norm;
+            for (int elementIndex = 0; elementIndex < vector.length; elementIndex++) {
+                vector[elementIndex] /= norm;
             }
         }
     }
@@ -1666,6 +1548,7 @@ class LinearSVM implements Classifier {
  * Simple ensemble wrapper that combines multiple independently trained Linear SVMs
  * by confidence-weighted voting.
  */
+/** Combines multiple LinearSVM models using confidence-weighted voting. */
 class LinearSVMEnsemble implements Classifier {
     private static final int NUM_CLASSES = 10;
     private final ArrayList<LinearSVM> models;
@@ -1674,7 +1557,7 @@ class LinearSVMEnsemble implements Classifier {
         if (models == null || models.isEmpty()) {
             throw new IllegalArgumentException("Ensemble must contain at least one model");
         }
-        this.models = new ArrayList<>(models);
+        this.models = new ArrayList<>(models); // Defensive copy
     }
     
     @Override
@@ -1684,26 +1567,26 @@ class LinearSVMEnsemble implements Classifier {
     
     @Override
     public ClassificationResult classify(DigitSample testSample) {
-        double[] classVotes = new double[NUM_CLASSES];
+        double[] classVotes = new double[NUM_CLASSES]; // Accumulate weighted votes per class
         double totalVote = 0.0;
         
         for (LinearSVM model : models) {
             ClassificationResult result = model.classify(testSample);
-            double confidence = Math.max(1e-6, result.getConfidence());
-            classVotes[result.getPredictedLabel()] += confidence;
+            double confidence = Math.max(1e-6, result.getConfidence()); // Clamp to avoid zero weights
+            classVotes[result.getPredictedLabel()] += confidence; // Weighted vote
             totalVote += confidence;
         }
         
         int predictedLabel = 0;
         double bestVote = classVotes[0];
-        for (int classIndex = 1; classIndex < NUM_CLASSES; classIndex++) {
+        for (int classIndex = 1; classIndex < NUM_CLASSES; classIndex++) { // Find class with highest vote
             if (classVotes[classIndex] > bestVote) {
                 bestVote = classVotes[classIndex];
                 predictedLabel = classIndex;
             }
         }
         
-        double confidence = totalVote > DigitRecognitionApp.ZERO ? bestVote / totalVote : DigitRecognitionApp.ZERO;
+        double confidence = totalVote > DigitRecognitionApp.ZERO ? bestVote / totalVote : DigitRecognitionApp.ZERO; // Normalize
         return new ClassificationResult(predictedLabel, confidence);
     }
     
@@ -1785,11 +1668,11 @@ class DatasetLoader {
         
         // Extract features (first 64 values)
         double[] features = new double[NUM_FEATURES];
-        for (int i = 0; i < NUM_FEATURES; i++) {
+        for (int featureIndex = 0; featureIndex < NUM_FEATURES; featureIndex++) {
             try {
-                features[i] = Double.parseDouble(parts[i]);
+                features[featureIndex] = Double.parseDouble(parts[featureIndex]);
             } catch (NumberFormatException exception) {
-                throw new IllegalArgumentException("Invalid feature value at position " + i + ": " + parts[i]);
+                throw new IllegalArgumentException("Invalid feature value at position " + featureIndex + ": " + parts[featureIndex]);
             }
         }
         
@@ -1872,8 +1755,8 @@ class DistanceCalculator {
         }
         
         double sum = 0.0;
-        for (int i = 0; i < features1.length; i++) {
-            double diff = features1[i] - features2[i];
+        for (int featureIndex = 0; featureIndex < features1.length; featureIndex++) {
+            double diff = features1[featureIndex] - features2[featureIndex];
             sum += diff * diff;
         }
         return Math.sqrt(sum);
@@ -1893,8 +1776,8 @@ class DistanceCalculator {
         }
         
         double sum = 0.0;
-        for (int i = 0; i < features1.length; i++) {
-            sum += Math.abs(features1[i] - features2[i]);
+        for (int featureIndex = 0; featureIndex < features1.length; featureIndex++) {
+            sum += Math.abs(features1[featureIndex] - features2[featureIndex]);
         }
         return sum;
     }
@@ -1904,23 +1787,23 @@ class DistanceCalculator {
      * 
      * @param features1 First feature vector
      * @param features2 Second feature vector
-     * @param p The order of the Minkowski distance (p=1 for Manhattan, p=2 for Euclidean)
+     * @param order The order of the Minkowski distance (order=1 for Manhattan, order=2 for Euclidean)
      * @return Minkowski distance between the vectors
-     * @throws IllegalArgumentException if vectors have different lengths or p <= 0
+     * @throws IllegalArgumentException if vectors have different lengths or order <= 0
      */
-    public static double minkowskiDistance(double[] features1, double[] features2, double p) {
+    public static double minkowskiDistance(double[] features1, double[] features2, double order) {
         if (features1.length != features2.length) {
             throw new IllegalArgumentException("Feature vectors must have the same length");
         }
-        if (p <= 0) {
-            throw new IllegalArgumentException("p must be positive");
+        if (order <= 0) {
+            throw new IllegalArgumentException("order must be positive");
         }
         
         double sum = 0.0;
-        for (int i = 0; i < features1.length; i++) {
-            sum += Math.pow(Math.abs(features1[i] - features2[i]), p);
+        for (int featureIndex = 0; featureIndex < features1.length; featureIndex++) {
+            sum += Math.pow(Math.abs(features1[featureIndex] - features2[featureIndex]), order);
         }
-        return Math.pow(sum, 1.0 / p);
+        return Math.pow(sum, 1.0 / order);
     }
 }
 
@@ -1967,10 +1850,10 @@ class EvaluationMetrics {
         System.out.println("\nConfusion Matrix for " + algorithmName + ":");
         System.out.println("True\\Pred   0   1   2   3   4   5   6   7   8   9");
         
-        for (int i = 0; i < NUM_CLASSES; i++) {
-            System.out.printf("   %d     ", i);
-            for (int j = 0; j < NUM_CLASSES; j++) {
-                System.out.printf("%4d", confusionMatrix[i][j]);
+        for (int trueLabel = 0; trueLabel < NUM_CLASSES; trueLabel++) {
+            System.out.printf("   %d     ", trueLabel);
+            for (int predictedLabel = 0; predictedLabel < NUM_CLASSES; predictedLabel++) {
+                System.out.printf("%4d", confusionMatrix[trueLabel][predictedLabel]);
             }
             System.out.println();
         }
@@ -1987,9 +1870,9 @@ class EvaluationMetrics {
         printReportHeader(algorithmName);
         double totalPrecision = 0, totalRecall = 0, totalF1 = 0;
         int totalSupport = 0;
-        for (int i = 0; i < NUM_CLASSES; i++) {
-            ClassMetrics metrics = computeClassMetrics(confusionMatrix, i);
-            printClassMetricsLine(i, metrics);
+        for (int classLabel = 0; classLabel < NUM_CLASSES; classLabel++) {
+            ClassMetrics metrics = computeClassMetrics(confusionMatrix, classLabel);
+            printClassMetricsLine(classLabel, metrics);
             totalPrecision += metrics.precision;
             totalRecall += metrics.recall;
             totalF1 += metrics.f1Score;
@@ -2006,15 +1889,15 @@ class EvaluationMetrics {
     }
     
     /** Computes precision/recall/F1 for one class. */
-    private static ClassMetrics computeClassMetrics(int[][] confusionMatrix, int cls) {
-        int tp = confusionMatrix[cls][cls];
+    private static ClassMetrics computeClassMetrics(int[][] confusionMatrix, int classLabel) {
+        int tp = confusionMatrix[classLabel][classLabel];
         int fp = 0, fn = 0, support = 0;
-        for (int j = 0; j < NUM_CLASSES; j++) {
-            if (cls != j) {
-                fp += confusionMatrix[j][cls];
-                fn += confusionMatrix[cls][j];
+        for (int otherClassLabel = 0; otherClassLabel < NUM_CLASSES; otherClassLabel++) {
+            if (classLabel != otherClassLabel) {
+                fp += confusionMatrix[otherClassLabel][classLabel];
+                fn += confusionMatrix[classLabel][otherClassLabel];
             }
-            support += confusionMatrix[cls][j];
+            support += confusionMatrix[classLabel][otherClassLabel];
         }
         double precision = (tp + fp > DigitRecognitionApp.INT_ZERO) ? (double) tp / (tp + fp) : DigitRecognitionApp.ZERO;
         double recall = (support > DigitRecognitionApp.INT_ZERO) ? (double) tp / support : DigitRecognitionApp.ZERO;
@@ -2023,9 +1906,9 @@ class EvaluationMetrics {
     }
     
     /** Prints one class metrics line. */
-    private static void printClassMetricsLine(int cls, ClassMetrics metrics) {
+    private static void printClassMetricsLine(int classLabel, ClassMetrics metrics) {
         System.out.printf("  %d   |   %.3f   |  %.3f   |  %.3f   |  %4d\n",
-            cls, metrics.precision, metrics.recall, metrics.f1Score, metrics.support);
+            classLabel, metrics.precision, metrics.recall, metrics.f1Score, metrics.support);
     }
     
     /** Prints macro averages over all classes. */
@@ -2059,12 +1942,12 @@ class EvaluationMetrics {
         int correct = 0;
         int total = 0;
         
-        for (int i = 0; i < NUM_CLASSES; i++) {
-            for (int j = 0; j < NUM_CLASSES; j++) {
-                if (i == j) {
-                    correct += confusionMatrix[i][j];
+        for (int trueLabel = 0; trueLabel < NUM_CLASSES; trueLabel++) {
+            for (int predictedLabel = 0; predictedLabel < NUM_CLASSES; predictedLabel++) {
+                if (trueLabel == predictedLabel) {
+                    correct += confusionMatrix[trueLabel][predictedLabel];
                 }
-                total += confusionMatrix[i][j];
+                total += confusionMatrix[trueLabel][predictedLabel];
             }
         }
         
@@ -2127,14 +2010,14 @@ class CustomCollections {
      * Custom sort implementation using insertion sort (simple and stable).
      */
     public static <T extends Comparable<T>> void sort(ArrayList<T> list) {
-        for (int i = 1; i < list.size(); i++) {
-            T key = list.get(i);
-            int j = i - 1;
-            while (j >= 0 && list.get(j).compareTo(key) > 0) {
-                list.set(j + 1, list.get(j));
-                j--;
+        for (int currentIndex = 1; currentIndex < list.size(); currentIndex++) {
+            T key = list.get(currentIndex);
+            int previousIndex = currentIndex - 1;
+            while (previousIndex >= 0 && list.get(previousIndex).compareTo(key) > 0) {
+                list.set(previousIndex + 1, list.get(previousIndex));
+                previousIndex--;
             }
-            list.set(j + 1, key);
+            list.set(previousIndex + 1, key);
         }
     }
     
@@ -2142,11 +2025,11 @@ class CustomCollections {
      * Custom shuffle implementation using Fisher-Yates algorithm.
      */
     public static <T> void shuffle(ArrayList<T> list, Random random) {
-        for (int i = list.size() - 1; i > 0; i--) {
-            int j = random.nextInt(i + 1);
-            T temp = list.get(i);
-            list.set(i, list.get(j));
-            list.set(j, temp);
+        for (int currentIndex = list.size() - 1; currentIndex > 0; currentIndex--) {
+            int randomIndex = random.nextInt(currentIndex + 1);
+            T temp = list.get(currentIndex);
+            list.set(currentIndex, list.get(randomIndex));
+            list.set(randomIndex, temp);
         }
     }
     
