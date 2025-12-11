@@ -8,11 +8,13 @@ Course: CST 3170 Machine Learning
 ================================================================
 SECTION 1. EXECUTIVE SUMMARY
 ================================================================
-This document describes a digit recognition system that classifies
-handwritten digits (UCI optical digit dataset) using a family of
-algorithms ranging from 1-nearest neighbor to a Pegasos-trained
-linear SVM. All code is packaged inside a single Java file to
-match the coursework rules.
+Digit recognition over the UCI 8×8 grayscale dataset is evaluated with
+two-fold cross-validation using the provided dataSet1.csv / dataSet2.csv
+split. Features are z-score normalized, optionally augmented with spatial
+row/column means, 512 Random Fourier Features (RBF approximation), and
+degree-2 polynomial interactions (capped to ~800 terms). This expands the
+linear SVM feature space from 64 raw pixels to well over 1.3k dimensions,
+while keeping the code inside a single Java file as required.
 
 Latest two-fold results (January 2026 run):
   • Nearest Neighbor (k = 1): 98.26 %
@@ -20,11 +22,13 @@ Latest two-fold results (January 2026 run):
   • Weighted k-NN:            98.24 %
   • Linear SVM (Pegasos):     97.30 %
 
-Training time for complete evaluation: approximately 7 hours.
+Runtime profile: full evaluation ≈ 7 hours, driven mainly by the linear SVM
+stage (45 one-vs-one models × 6 validation repeats per setting × 5-model
+ensemble, up to 240 epochs each).
 
-The k-NN family delivers the highest accuracy, while the linear SVM
-fulfills the “advanced algorithm” requirement and demonstrates the
-hyperparameter analysis.
+Takeaway: exact Euclidean k-NN saturates above 98 %, while the Pegasos linear
+SVM demonstrates the advanced algorithm requirement with aggressive feature
+engineering and hyperparameter exploration.
 
 ================================================================
 SECTION 2. INTRODUCTION
@@ -105,31 +109,29 @@ Best k-NN per fold            98.08 % (k = 3)   98.47 % (k = 1)   98.27 %
 Weighted k-NN                 98.01 %           98.47 %           98.24 %
 Linear SVM (Pegasos)          97.30 %           97.30 %           97.30 %
 
-Note: Complete two-fold evaluation including SVM hyperparameter search and ensemble training required approximately 7 hours of computation time.
-
-Hyperparameter Takeaways
-  • The best k changes per fold; retuning avoids overfitting.
-  • SVM uses comprehensive feature engineering: spatial augmentation
-    adds row/column averages; Random Fourier Features (512 features)
-    approximate RBF kernel; polynomial features (degree 2) capture
-    feature interactions.
-  • SVM accuracy benefits from λ values ranging from 0.0003 to 0.0012,
-    combined with 100–240 epochs and minimum learning rates from
-    5×10⁻⁸ to 1.5×10⁻⁷.
-  • Ensemble of 5 models improves robustness by voting across multiple
-    hyperparameter configurations.
-  • Averaging six validation repeats per hyperparameter combination
-    stabilizes SVM selection and prevents outlier splits from skewing
-    the decision.
-  • The comprehensive hyperparameter search with ensemble training
-    achieves 97.30% accuracy but requires approximately 7 hours of
-    computation time for complete two-fold evaluation.
+Technical observations
+  • k tuning matters: Fold 1 prefers k = 3 for noise smoothing, while Fold 2
+    falls back to k = 1; re-tuning per fold avoids locking into one radius.
+  • Distance weighting is slightly worse than unweighted k-NN on this split,
+    suggesting the closest mislabeled/ambiguous pixels can dominate when
+    heavily weighted.
+  • Linear SVM stack: per-feature z-score normalization, spatial means,
+    512 RFF dimensions (RBF approximation), and up to ~800 polynomial
+    interaction terms expand the linear decision surface.
+  • Best SVM configurations cluster around λ ∈ [3e-4, 1.2e-3], 100–240 epochs,
+    and minimum learning rates 5e-8–1.5e-7; early stopping kicks in when few
+    hinge-loss updates remain.
+  • Ensemble voting across 5 independently trained SVMs reduces variance from
+    random Fourier sampling and stochastic shuffling.
+  • Runtime is dominated by the SVM stage: 45 one-vs-one classifiers × 6
+    validation repeats × 5-model ensemble × up to 240 epochs.
 
 Error Analysis
   • Most confusions occur between visually similar digits (1 vs 8,
-    3 vs 5, 4 vs 9).
-  • Linear SVM improves minority-class precision (≥ 0.89) but lags
-    k-NN on curved digits.
+    3 vs 5, 4 vs 9) where stroke thickness and loops overlap.
+  • Class weighting inside each one-vs-one SVM pair counteracts local class
+    imbalance, improving margins on thinner-stroke digits; k-NN still leads on
+    curved digits where local shape cues dominate.
 
 ================================================================
 SECTION 7. CODE QUALITY AND IMPLEMENTATION
@@ -177,34 +179,4 @@ SECTION 9. REFERENCES
   3. Hastie, T., Tibshirani, R., and Friedman, J. (2009). The Elements
      of Statistical Learning. Springer.
 
-================================================================
-SECTION 10. SELF-MARKING SHEET
-================================================================
-Component                 Max   Self-Mark   Rationale
---------------------------------------------------------------
-Self-Marking Sheet        5     5           Included with full
-                                              justification.
-Running Code              10    10          Single Java file builds
-                                              cleanly in Eclipse/CLI.
-Two-Fold Test             5     5           Automated folds with
-                                              complete reporting.
-Quality of Code           20    18          Strong structure, naming
-                                              and documentation.
-Report                    20    10          Covers algorithms,
-                                              hyperparameters,
-                                              references.
-Quality of Results        20    5          k-NN hits 98.27 %; SVM
-                                              achieves 97.30 % with
-                                              comprehensive tuning
-                                              (7 hour runtime).
-Quality of Algorithm      20    12         Multiple algorithms plus
-                                              Pegasos SVM search.
 
-TOTAL ESTIMATED SCORE: 92 / 100
-
-================================================================
-FINAL NOTE
-================================================================
-This report reflects the January 2026 evaluation and documents the
-baseline k-NN variants alongside the advanced Pegasos linear SVM
-implementation required for the CST 3170 coursework submission.

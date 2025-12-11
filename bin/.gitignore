@@ -1,0 +1,9 @@
+/CustomCollections.class
+/CustomObjects.class
+/DigitRecognitionApp$HyperparameterCandidate.class
+/DigitRecognitionApp$SVMTrainingResult.class
+/EvaluationMetrics$ClassMetrics.class
+/LinearSVM$PegasosEpochResult.class
+/LinearSVM$PegasosResult.class
+/LinearSVM$VotingResult.class
+/LinearSVMEnsemble.class
